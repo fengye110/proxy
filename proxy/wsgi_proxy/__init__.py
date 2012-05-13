@@ -3,6 +3,7 @@ from urlparse import urlparse
 import copy
 import logging
 
+logging.basicConfig()
 logger = logging.getLogger(__name__)
 
 _hoppish = {
@@ -25,8 +26,12 @@ def reconstruct_url(environ):
         else:
             if environ['SERVER_PORT'] != '80':
                url += ':' + environ['SERVER_PORT']
-    url += environ.get('SCRIPT_NAME','')
-    url += environ.get('PATH_INFO','')
+    #url += environ.get('SCRIPT_NAME','')
+    path_info=environ.get('PATH_INFO','')
+    if path_info.find(environ['HTTP_HOST']):
+        host = environ['HTTP_HOST']
+        url += path_info[len(host) + path_info.find(host):]
+    logger.warning('=== url == %s', url)
     # Fix ;arg=value in url
     if url.find('%3B') is not -1:
         url, arg = url.split('%3B', 1)
@@ -87,7 +92,8 @@ class WSGIProxyApplication(object):
     
         # Make the remote request
         try:
-            logger.debug('%s %s %s' % (environ['REQUEST_METHOD'], path, str(headers)))
+            logger.warning('%s %s %s' % (environ['REQUEST_METHOD'], path, str(headers)))
+            logger.warning('body: %s' %(body))
             connection.request(environ['REQUEST_METHOD'], path, body=body, headers=headers)
         except:
             # We need extra exception handling in the case the server fails in mid connection, it's an edge case but I've seen it
@@ -109,3 +115,16 @@ class WSGIProxyApplication(object):
     
     def __call__(self, environ, start_response):
         return self.handler(environ, start_response)
+
+
+
+def application(environ, start_response):
+    a = WSGIProxyApplication()
+    return a(environ, start_response)
+
+if __name__ == "__main__":
+    from wsgiref.simple_server import make_server
+    host, port = "localhost", 9978
+
+    httpd = make_server(host, port, application)
+    httpd.serve_forever()
